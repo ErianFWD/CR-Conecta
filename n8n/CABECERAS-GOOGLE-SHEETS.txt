@@ -1,0 +1,1 @@
+EventId	DonacionId	FechaRegistro	Nombre	Correo	Producto	Categoria	Cantidad	Destino	Provincia	Canton	Anonima	FuenteNombre	EstadoCorreo	FechaEnvio	ErrorCorreo	EstadoEquipo	FechaEquipo	ErrorEquipo

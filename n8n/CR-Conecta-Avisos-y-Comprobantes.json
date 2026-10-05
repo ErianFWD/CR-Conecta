@@ -1,0 +1,962 @@
+{
+  "name": "CR Conecta | Comprobantes personalizados, Hacienda y Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cr-conecta-solicitud-aprobada",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "cr-approval-webhook",
+      "name": "Solicitud aprobada",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        160
+      ],
+      "webhookId": "cr-conecta-solicitud-aprobada"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nif (body?.type !== 'request.approved' || !body.data?.id || !body.data?.category) throw new Error('Evento de aprobación inválido');\nconst d = body.data;\nconst esc = value => String(value ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\nreturn [{ json: { subject: `CR Conecta: necesidad aprobada #${d.id}`, html: `<h2>Necesidad lista para recibir donaciones</h2><p><strong>Solicitud:</strong> ${esc(d.id)}</p><p><strong>Categoría:</strong> ${esc(d.category)}</p><p><strong>Zona:</strong> ${esc(d.zone)}</p><p><strong>Cantidad:</strong> ${esc(d.amount)} ${esc(d.unit)}</p><p><strong>Prioridad:</strong> ${esc(d.priority)}</p><p>Revisá la necesidad aprobada en CR Conecta antes de coordinar aportes.</p><small>Aviso de un prototipo académico; datos simulados.</small>` } }];"
+      },
+      "id": "cr-format-approval",
+      "name": "Preparar aviso de necesidad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "avisos@ejemplo.invalid",
+        "toEmail": "equipo@ejemplo.invalid",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {},
+        "emailFormat": "html"
+      },
+      "id": "cr-email-approval",
+      "name": "Avisar al equipo",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        760,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cr-conecta-donacion-registrada",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "cr-donation-webhook",
+      "name": "Donación registrada",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        440
+      ],
+      "webhookId": "cr-conecta-donacion-registrada"
+    },
+    {
+      "name": "Configurar y validar donación",
+      "id": "cr-4",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        440
+      ],
+      "parameters": {
+        "jsCode": "// Cambiá SOLO estos valores al importar. No pongás contraseñas aquí.\nconst config = {\n  remitente: 'avisos@ejemplo.invalid',\n  correoEquipo: 'equipo@ejemplo.invalid',\n  spreadsheetId: 'PEGA_AQUI_EL_ID_DE_GOOGLE_SHEETS',\n  sheetName: 'Donaciones',\n  consultarHaciendaSiempre: true\n};\nconst body = $input.first().json.body;\nconst d = body?.data;\nif (body?.type !== 'donation.registered' || !/^DON-[A-Z0-9-]+$/i.test(d?.id || '') || !d?.product || body.eventId !== `donation.registered:${d.id}`) throw new Error('Evento de donación inválido');\nconst email = String(d.recipient?.email || '').trim();\nif (!/^[^\\s@,;<>]+@[^\\s@,;<>]+\\.[^\\s@,;<>]+$/.test(email)) throw new Error('La cuenta del donante necesita un correo válido');\nif (config.spreadsheetId.startsWith('PEGA_') || [config.remitente, config.correoEquipo].some(e => e.endsWith('.invalid'))) throw new Error('Completá remitente, correoEquipo y spreadsheetId en este nodo');\nconst name = String(d.recipient?.name || '').trim().slice(0, 120);\nconst identification = String(d.recipient?.identification || '').trim();\nreturn [{ json: { eventId: body.eventId, occurredAt: body.occurredAt, donation: d, email, registeredName: name, identification, config,\n  consultarHacienda: /^\\d{9,12}$/.test(identification) && (config.consultarHaciendaSiempre || !name) } }];"
+      }
+    },
+    {
+      "name": "¿Consultar Hacienda?",
+      "id": "cr-5",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        730,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "¿Consultar Hacienda?",
+              "leftValue": "={{ $json.consultarHacienda }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Consultar Hacienda",
+      "id": "cr-6",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        950,
+        350
+      ],
+      "parameters": {
+        "url": "https://api.hacienda.go.cr/fe/ae",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "identificacion",
+              "value": "={{ $json.identification }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "name": "Preparar aviso y comprobante",
+      "id": "cr-7",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1190,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const base = $('Configurar y validar donación').first().json;\nconst response = $input.first().json;\nconst haciendaName = typeof response.nombre === 'string' ? response.nombre.trim().slice(0, 120) : '';\nconst name = haciendaName || base.registeredName || 'donante';\nconst d = base.donation;\nconst esc = value => String(value ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\nconst summary = `<p><strong>Fecha:</strong> ${esc(d.date)}</p><p><strong>Producto:</strong> ${esc(d.product)}</p><p><strong>Categoría:</strong> ${esc(d.category)}</p><p><strong>Cantidad:</strong> ${esc(d.quantity)}</p><p><strong>Destino:</strong> ${esc(d.destination)}</p><p><strong>Estado:</strong> ${esc(d.status)}</p>`;\nconst html = `<div style=\"font-family:Arial,sans-serif;color:#123452;max-width:640px;margin:auto\"><h2 style=\"color:#1763a0\">Comprobante de registro ${esc(d.id)}</h2><p>Hola ${esc(name)}:</p><p>Gracias por apoyar a CR Conecta. Recibimos el registro de tu donación. El aporte está pendiente de coordinación.</p>${summary}<p>Conservá este correo para el seguimiento de tu aporte.</p><hr><small>Este comprobante registra el aporte; no confirma recepción física, entrega ni beneficio fiscal.</small></div>`;\nconst teamHtml = `<h2>Nuevo aporte registrado #${esc(d.id)}</h2><p>Donante: ${d.anonymous ? 'Anónimo' : esc(name)}</p>${summary}<p>Revisá el aporte en CR Conecta para coordinar su seguimiento.</p>`;\n// Evita interpretar texto del donante como fórmulas de Sheets.\nconst textCell = value => { const text = String(value ?? ''); return /^[=+@\\-\\t\\r\\n]/.test(text.trimStart()) ? \"'\" + text : text; };\nconst row = {\n  EventId: base.eventId, DonacionId: d.id, FechaRegistro: d.date,\n  Nombre: d.anonymous ? 'Anónimo' : textCell(name), Correo: d.anonymous ? '' : textCell(base.email),\n  Producto: textCell(d.product), Categoria: textCell(d.category), Cantidad: Number(d.quantity),\n  Destino: textCell(d.destination), Provincia: textCell(d.province), Canton: textCell(d.canton),\n  Anonima: d.anonymous ? 'Sí' : 'No', FuenteNombre: d.anonymous ? 'Privado' : haciendaName ? 'Hacienda' : 'Registro',\n  EstadoCorreo: 'Pendiente', FechaEnvio: '', ErrorCorreo: '', EstadoEquipo: 'Pendiente', FechaEquipo: '', ErrorEquipo: ''\n};\n// La cédula no pasa a la hoja ni a los correos.\nreturn [{ json: { eventId: base.eventId, config: base.config, email: base.email, name,\n  subject: `CR Conecta: comprobante de registro ${d.id}`, html,\n  teamSubject: `CR Conecta: nueva donación ${d.id}`, teamHtml, row } }];"
+      }
+    },
+    {
+      "name": "Buscar registro del evento",
+      "id": "cr-8",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1420,
+        440
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Preparar aviso y comprobante').first().json.config.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Preparar aviso y comprobante').first().json.config.sheetName }}",
+          "mode": "name"
+        },
+        "options": {
+          "returnFirstMatch": false
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "EventId",
+              "lookupValue": "={{ $('Preparar aviso y comprobante').first().json.eventId }}"
+            }
+          ]
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "name": "Decidir envíos",
+      "id": "cr-9",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const base = $('Preparar aviso y comprobante').first().json;\nconst rows = $input.all().map(item => item.json).filter(row => row.EventId === base.eventId);\nif (rows.length > 1) throw new Error('Hay filas duplicadas para este EventId. Revisá Sheets antes de reenviar');\nconst previous = rows[0] || {};\nconst row = { ...base.row };\nfor (const key of ['EstadoCorreo','FechaEnvio','ErrorCorreo','EstadoEquipo','FechaEquipo','ErrorEquipo']) {\n  if (previous[key] !== undefined && previous[key] !== '') row[key] = previous[key];\n}\nreturn [{ json: { ...base, row, enviarDonante: row.EstadoCorreo !== 'Enviado', enviarEquipo: row.EstadoEquipo !== 'Enviado' } }];"
+      }
+    },
+    {
+      "name": "Guardar registro",
+      "id": "cr-10",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1850,
+        440
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Preparar aviso y comprobante').first().json.config.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Preparar aviso y comprobante').first().json.config.sheetName }}",
+          "mode": "name"
+        },
+        "options": {
+          "cellFormat": "RAW"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "EventId": "={{ $('Decidir envíos').first().json.row.EventId }}",
+            "DonacionId": "={{ $('Decidir envíos').first().json.row.DonacionId }}",
+            "FechaRegistro": "={{ $('Decidir envíos').first().json.row.FechaRegistro }}",
+            "Nombre": "={{ $('Decidir envíos').first().json.row.Nombre }}",
+            "Correo": "={{ $('Decidir envíos').first().json.row.Correo }}",
+            "Producto": "={{ $('Decidir envíos').first().json.row.Producto }}",
+            "Categoria": "={{ $('Decidir envíos').first().json.row.Categoria }}",
+            "Cantidad": "={{ $('Decidir envíos').first().json.row.Cantidad }}",
+            "Destino": "={{ $('Decidir envíos').first().json.row.Destino }}",
+            "Provincia": "={{ $('Decidir envíos').first().json.row.Provincia }}",
+            "Canton": "={{ $('Decidir envíos').first().json.row.Canton }}",
+            "Anonima": "={{ $('Decidir envíos').first().json.row.Anonima }}",
+            "FuenteNombre": "={{ $('Decidir envíos').first().json.row.FuenteNombre }}",
+            "EstadoCorreo": "={{ $('Decidir envíos').first().json.row.EstadoCorreo }}",
+            "FechaEnvio": "={{ $('Decidir envíos').first().json.row.FechaEnvio }}",
+            "ErrorCorreo": "={{ $('Decidir envíos').first().json.row.ErrorCorreo }}",
+            "EstadoEquipo": "={{ $('Decidir envíos').first().json.row.EstadoEquipo }}",
+            "FechaEquipo": "={{ $('Decidir envíos').first().json.row.FechaEquipo }}",
+            "ErrorEquipo": "={{ $('Decidir envíos').first().json.row.ErrorEquipo }}"
+          },
+          "matchingColumns": [
+            "EventId"
+          ],
+          "schema": [
+            {
+              "id": "EventId",
+              "displayName": "EventId",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DonacionId",
+              "displayName": "DonacionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FechaRegistro",
+              "displayName": "FechaRegistro",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Nombre",
+              "displayName": "Nombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Correo",
+              "displayName": "Correo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Producto",
+              "displayName": "Producto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Categoria",
+              "displayName": "Categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Cantidad",
+              "displayName": "Cantidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Destino",
+              "displayName": "Destino",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Provincia",
+              "displayName": "Provincia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Canton",
+              "displayName": "Canton",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Anonima",
+              "displayName": "Anonima",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FuenteNombre",
+              "displayName": "FuenteNombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "EstadoCorreo",
+              "displayName": "EstadoCorreo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FechaEnvio",
+              "displayName": "FechaEnvio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ErrorCorreo",
+              "displayName": "ErrorCorreo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "EstadoEquipo",
+              "displayName": "EstadoEquipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FechaEquipo",
+              "displayName": "FechaEquipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ErrorEquipo",
+              "displayName": "ErrorEquipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "name": "¿Enviar comprobante?",
+      "id": "cr-11",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2070,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "¿Enviar comprobante?",
+              "leftValue": "={{ $('Decidir envíos').first().json.enviarDonante }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Enviar aporte y comprobante",
+      "id": "cr-12",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2300,
+        350
+      ],
+      "parameters": {
+        "fromEmail": "={{ $('Preparar aviso y comprobante').first().json.config.remitente }}",
+        "toEmail": "={{ $('Preparar aviso y comprobante').first().json.email }}",
+        "subject": "={{ $('Preparar aviso y comprobante').first().json.subject }}",
+        "html": "={{ $('Preparar aviso y comprobante').first().json.html }}",
+        "options": {
+          "appendAttribution": false
+        },
+        "emailFormat": "html"
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "name": "Resultado del comprobante",
+      "id": "cr-13",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2510,
+        350
+      ],
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst base = $('Decidir envíos').first().json;\nconst rejected = Array.isArray(result.rejected) && result.rejected.length > 0;\nconst accepted = Array.isArray(result.accepted) && result.accepted.length > 0;\nconst ok = !result.error && !rejected && accepted;\nreturn [{ json: { EventId: base.eventId,\n  EstadoCorreo: ok ? 'Enviado' : 'Error', FechaEnvio: ok ? new Date().toISOString() : '',\n  ErrorCorreo: ok ? '' : 'SMTP no confirmó aceptación. Revisá la ejecución antes de reintentar.' } }];"
+      }
+    },
+    {
+      "name": "Actualizar envío al donante",
+      "id": "cr-14",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        2720,
+        350
+      ],
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Preparar aviso y comprobante').first().json.config.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Preparar aviso y comprobante').first().json.config.sheetName }}",
+          "mode": "name"
+        },
+        "options": {
+          "cellFormat": "RAW"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "EventId": "={{ $json.EventId }}",
+            "EstadoCorreo": "={{ $json.EstadoCorreo }}",
+            "FechaEnvio": "={{ $json.FechaEnvio }}",
+            "ErrorCorreo": "={{ $json.ErrorCorreo }}"
+          },
+          "matchingColumns": [
+            "EventId"
+          ],
+          "schema": [
+            {
+              "id": "EventId",
+              "displayName": "EventId",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "EstadoCorreo",
+              "displayName": "EstadoCorreo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FechaEnvio",
+              "displayName": "FechaEnvio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ErrorCorreo",
+              "displayName": "ErrorCorreo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "name": "¿Avisar al equipo?",
+      "id": "cr-15",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2940,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "¿Avisar al equipo?",
+              "leftValue": "={{ $('Decidir envíos').first().json.enviarEquipo }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Avisar nuevo aporte al equipo",
+      "id": "cr-16",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        3150,
+        440
+      ],
+      "parameters": {
+        "fromEmail": "={{ $('Preparar aviso y comprobante').first().json.config.remitente }}",
+        "toEmail": "={{ $('Preparar aviso y comprobante').first().json.config.correoEquipo }}",
+        "subject": "={{ $('Preparar aviso y comprobante').first().json.teamSubject }}",
+        "html": "={{ $('Preparar aviso y comprobante').first().json.teamHtml }}",
+        "options": {
+          "appendAttribution": false
+        },
+        "emailFormat": "html"
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "name": "Resultado del aviso",
+      "id": "cr-17",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst base = $('Decidir envíos').first().json;\nconst rejected = Array.isArray(result.rejected) && result.rejected.length > 0;\nconst accepted = Array.isArray(result.accepted) && result.accepted.length > 0;\nconst ok = !result.error && !rejected && accepted;\nreturn [{ json: { EventId: base.eventId,\n  EstadoEquipo: ok ? 'Enviado' : 'Error', FechaEquipo: ok ? new Date().toISOString() : '',\n  ErrorEquipo: ok ? '' : 'SMTP no confirmó aceptación. Revisá la ejecución antes de reintentar.' } }];"
+      }
+    },
+    {
+      "name": "Actualizar aviso al equipo",
+      "id": "cr-18",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        3570,
+        440
+      ],
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Preparar aviso y comprobante').first().json.config.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Preparar aviso y comprobante').first().json.config.sheetName }}",
+          "mode": "name"
+        },
+        "options": {
+          "cellFormat": "RAW"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "EventId": "={{ $json.EventId }}",
+            "EstadoEquipo": "={{ $json.EstadoEquipo }}",
+            "FechaEquipo": "={{ $json.FechaEquipo }}",
+            "ErrorEquipo": "={{ $json.ErrorEquipo }}"
+          },
+          "matchingColumns": [
+            "EventId"
+          ],
+          "schema": [
+            {
+              "id": "EventId",
+              "displayName": "EventId",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "EstadoEquipo",
+              "displayName": "EstadoEquipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FechaEquipo",
+              "displayName": "FechaEquipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ErrorEquipo",
+              "displayName": "ErrorEquipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    }
+  ],
+  "connections": {
+    "Solicitud aprobada": {
+      "main": [
+        [
+          {
+            "node": "Preparar aviso de necesidad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar aviso de necesidad": {
+      "main": [
+        [
+          {
+            "node": "Avisar al equipo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Donación registrada": {
+      "main": [
+        [
+          {
+            "node": "Configurar y validar donación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configurar y validar donación": {
+      "main": [
+        [
+          {
+            "node": "¿Consultar Hacienda?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Consultar Hacienda?": {
+      "main": [
+        [
+          {
+            "node": "Consultar Hacienda",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar aviso y comprobante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Hacienda": {
+      "main": [
+        [
+          {
+            "node": "Preparar aviso y comprobante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar aviso y comprobante": {
+      "main": [
+        [
+          {
+            "node": "Buscar registro del evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar registro del evento": {
+      "main": [
+        [
+          {
+            "node": "Decidir envíos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decidir envíos": {
+      "main": [
+        [
+          {
+            "node": "Guardar registro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar registro": {
+      "main": [
+        [
+          {
+            "node": "¿Enviar comprobante?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Enviar comprobante?": {
+      "main": [
+        [
+          {
+            "node": "Enviar aporte y comprobante",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Avisar al equipo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar aporte y comprobante": {
+      "main": [
+        [
+          {
+            "node": "Resultado del comprobante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado del comprobante": {
+      "main": [
+        [
+          {
+            "node": "Actualizar envío al donante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar envío al donante": {
+      "main": [
+        [
+          {
+            "node": "¿Avisar al equipo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Avisar al equipo?": {
+      "main": [
+        [
+          {
+            "node": "Avisar nuevo aporte al equipo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar nuevo aporte al equipo": {
+      "main": [
+        [
+          {
+            "node": "Resultado del aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado del aviso": {
+      "main": [
+        [
+          {
+            "node": "Actualizar aviso al equipo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}

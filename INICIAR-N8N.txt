@@ -1,0 +1,19 @@
+N8N: CORREOS PERSONALIZADOS Y GOOGLE SHEETS
+
+Primero abrí n8n/GUIA-CORREOS-Y-SHEETS.md y seguí los pasos en orden.
+
+1. Creá una hoja de Google Sheets con pestaña Donaciones.
+2. Pegá CABECERAS-GOOGLE-SHEETS.txt en A1.
+3. Importá n8n/CR-Conecta-Avisos-y-Comprobantes.json.
+4. Completá los correos y el ID de Sheets en Configurar y validar donación.
+5. Seleccioná tus credenciales SMTP, Google Sheets y Header Auth.
+6. Poné tu correo en n8n/EVENTO-DE-PRUEBA.json.
+7. En el Webhook Donación registrada pulsá Listen for test event.
+8. Revisá la Test URL en .env y ejecutá npm run n8n:test.
+
+Name de Header Auth: X-CR-Conecta-Token
+Value: valor de N8N_WEBHOOK_TOKEN de tu .env.
+
+Después de probar, activá el flujo y usá sus Production URL en .env.
+Reiniciá npm run server si cambiás las URL o el token.
+Conservá GROQ_API_KEY para el asistente y las proyecciones.

@@ -1,0 +1,22 @@
+{
+  "eventId": "donation.registered:DON-PRUEBA1",
+  "type": "donation.registered",
+  "occurredAt": "2026-10-05T14:00:00Z",
+  "data": {
+    "id": "DON-PRUEBA1",
+    "category": "Alimentos sellados",
+    "product": "Arroz",
+    "quantity": 2,
+    "date": "2026-10-05",
+    "destination": "Institución",
+    "status": "Registrada",
+    "anonymous": false,
+    "province": "Puntarenas",
+    "canton": "Puntarenas",
+    "recipient": {
+      "name": "Usuario de prueba",
+      "email": "CAMBIAR_POR_TU_CORREO",
+      "identification": ""
+    }
+  }
+}
