@@ -1071,7 +1071,17 @@
   ],
   "activity": [
     {
-"id": "5b9f94e3-f609-408e-9964-bed85f11c0a5",
+      "id": "b228c519-6be8-4bfd-b38d-f6136c719682",
+      "timestamp": "2026-10-06T20:35:26.116Z",
+      "actor": "María Administradora",
+      "actorRole": "Administrador",
+      "action": "inició sesión",
+      "entity": "sesión",
+      "entityId": "u1",
+      "detail": ""
+    },
+    {
+      "id": "5b9f94e3-f609-408e-9964-bed85f11c0a5",
       "timestamp": "2026-10-02T16:11:47.004Z",
       "actor": "Fundación Horizonte",
       "actorRole": "Empresa donante",
@@ -1181,21 +1191,16 @@
       "detail": "Registrada"
     },
     {
-"id": "b64d31c6-ab04-4f1d-ad0b-c5a936f0799e",
-        "timestamp": "2026-10-02T15:49:57.281Z",
-        "actor": "Fundación Horizonte",
-        "actorRole": "Empresa donante",
-        "action": "inició sesión",
-        "entity": "sesión",
-        "entityId": "u4",
-        "detail": ""
-      },
-      {
-      "id": "fe8c7be6-70cc-40a5-81c0-14cc339703ce",
-      "timestamp": "2026-10-02T15:34:15.720Z",
-      "actor": "Carlos Donante",
-      "actorRole": "Donante individual",
-
+      "id": "b64d31c6-ab04-4f1d-ad0b-c5a936f0799e",
+      "timestamp": "2026-10-02T15:49:57.281Z",
+      "actor": "Fundación Horizonte",
+      "actorRole": "Empresa donante",
+      "action": "inició sesión",
+      "entity": "sesión",
+      "entityId": "u4",
+      "detail": ""
+    },
+    {
       "id": "7d48abfc-24d3-4701-8529-c03320ce8973",
       "timestamp": "2026-10-01T21:07:46.122Z",
       "actor": "Alianza Comunitaria",

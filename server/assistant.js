@@ -1,6 +1,6 @@
-const MAX_QUESTION_LENGTH = 1200;
-const MAX_HISTORY_MESSAGES = 8;
-const MAX_HISTORY_MESSAGE_LENGTH = 1200;
+const MAX_QUESTION_LENGTH = 10000;
+const MAX_HISTORY_MESSAGES = 20;
+const MAX_HISTORY_MESSAGE_LENGTH = 4000;
 
 const KNOWLEDGE_BASE = [
   'CR Conecta es un prototipo académico para coordinar necesidades comunitarias, donaciones y voluntariado en Costa Rica.',
@@ -35,12 +35,12 @@ function parseAssistantResponse(content) {
   }
   if (parsed && typeof parsed === 'object' && typeof parsed.answer === 'string' && parsed.answer.trim()) {
     return {
-      answer: parsed.answer.trim().slice(0, 3000),
+      answer: parsed.answer.trim().slice(0, 10000),
       destination: resolveAssistantDestination(parsed.destination)
     };
   }
   // Older provider responses may be plain text; they can answer but never navigate.
-  return { answer: content.trim().slice(0, 3000), destination: null };
+  return { answer: content.trim().slice(0, 10000), destination: null };
 }
 
 export function normalizeHistory(history) {
@@ -89,7 +89,7 @@ export async function answerSiteQuestion({
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 700 }),
+      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 2500 }),
       signal: AbortSignal.timeout(30000)
     });
   } catch (cause) {

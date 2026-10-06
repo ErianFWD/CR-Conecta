@@ -1,3 +1,9 @@
+# Actualización: proyecciones y PDF
+
+La actualización visual separa los textos de las tarjetas y mejora las gráficas del panel. El árbol de dependencias pasó de 20 a 0 alertas de `npm audit`; consultá [AUDITORIA-DEPENDENCIAS.md](AUDITORIA-DEPENDENCIAS.md).
+
+Consultá [GUIA-PROYECCIONES.md](GUIA-PROYECCIONES.md) para carga y descarga PDF, seguimiento de metas, configuración incluida y ejecución de Jest. Los resultados están en [RESULTADOS-PRUEBAS.md](RESULTADOS-PRUEBAS.md).
+
 # Actualización de revisión
 
 Ver `CAMBIOS-Y-PRUEBAS.md` para los cambios de navegación, registros nacionales, confirmaciones y pruebas. Para iniciar esta entrega ejecutar `npm install`, `npm run server` y `npm run dev` en terminales separadas.
@@ -8,7 +14,7 @@ Prototipo académico para coordinar solicitudes, donaciones y voluntariado. Toda
 
 ## Requisitos
 
-- Node.js 20.19+ o 22.12+
+- Node.js 24 (versión utilizada y recomendada para esta entrega)
 - npm
 
 ## Desarrollo local
@@ -26,13 +32,13 @@ En otra terminal:
 npm run dev
 ```
 
-La interfaz estará en la dirección que indique Vite (por defecto `http://localhost:5173`). La API corre en `http://localhost:3001`. Para cambiarla, copiá `.env.example` a `.env` y ajustá `VITE_API_URL`; `CLIENT_ORIGIN` configura el origen permitido de la interfaz en el servidor.
+La interfaz estará en la dirección que indique Vite (por defecto `http://localhost:5173`). La API corre en `http://localhost:3001`. El `.env` de tu captura ya está incluido. Para cambiar la dirección, ajustá `VITE_API_URL` en ese archivo; `CLIENT_ORIGIN` configura el origen permitido de la interfaz en el servidor.
 
 Las cuentas de demostración comparten la contraseña `conecta-demo` únicamente en desarrollo local. La pantalla de acceso solicita la contraseña y no usa Google/Gmail: ese flujo sigue siendo una simulación explícitamente identificada como tal.
 
 ## Asistente de IA
 
-El chat envía las preguntas a la API Node y de ahí a Groq; la clave nunca se entrega al navegador. Puede responder preguntas abiertas y orientar sobre CR Conecta. El contexto del prototipo no adjunta perfiles, solicitudes privadas ni datos personales. Cuando identifica una sección pública pertinente, puede llevar al usuario a Inicio, Necesidades, Donar, Solicitar ayuda o Acceso. El servidor y la interfaz validan cada destino contra una lista cerrada: no se permite navegar por el asistente a otros sitios web, al panel administrativo ni a perfiles personales. Las acciones de Donar y Solicitar ayuda pueden requerir una sesión. La IA puede equivocarse; no ingreses información personal ni sensible.
+El chat envía las preguntas a la API Node y de ahí a Groq; la clave nunca se entrega al navegador. Puede responder preguntas abiertas y ayudar con temas generales, redacción, ideas, análisis y programación, además de orientar sobre CR Conecta. La interfaz admite preguntas de hasta 10.000 caracteres y conserva más contexto reciente; el máximo efectivo también depende del modelo y de la cuota de Groq. El contexto del prototipo no adjunta perfiles, solicitudes privadas ni datos personales. Cuando identifica una sección pública pertinente, puede llevar al usuario a Inicio, Necesidades, Donar, Solicitar ayuda o Acceso. El servidor y la interfaz validan cada destino contra una lista cerrada: no se permite navegar por el asistente a otros sitios web, al panel administrativo ni a perfiles personales. Las acciones de Donar y Solicitar ayuda pueden requerir una sesión. La IA puede equivocarse; no ingreses información personal ni sensible.
 
 El archivo `.env` local ya está creado con un marcador, no con una clave funcional. Reemplazá `pon-tu-clave-aqui` por tu propia clave de Groq, guardá el archivo y reiniciá `npm run server`:
 
@@ -91,7 +97,15 @@ El resumen del administrador reúne indicadores y gráficas de cuentas por rol, 
 
 Las solicitudes tienen su propia sección en el menú principal, separada del panel de gestión. Entra todo el mundo, pero el servidor ya devuelve información distinta según quién consulta: la administración recibe todas las solicitudes con los campos internos para dictaminarlas, la persona beneficiaria solo las propias, y el resto de los roles únicamente las solicitudes aprobadas y en su forma pública, sin datos personales. La interfaz no agrega ni oculta información por su cuenta: se limita a mostrar la que el servidor le entrega.
 
-Administración, en su resumen, y las empresas donantes, en «Campañas y empleo», pueden generar con IA una proyección semanal para la próxima campaña. Se especifican categoría, meta y duración; el resultado incluye gráfico, explicación y supuestos. La API envía a Groq solamente datos resumidos de campañas y donaciones que corresponden al rol (la empresa solo ve los suyos), sin nombres, perfiles ni información personal. Son escenarios orientativos basados en datos simulados y escasos, no resultados garantizados. Requiere `GROQ_API_KEY` y un `GROQ_MODEL` compatible configurados en `.env`.
+Administración, en su resumen, y las empresas donantes, en «Campañas y empleo», cuentan con un módulo de proyecciones que se calcula **con los datos de la propia plataforma** (donaciones, solicitudes, inventario y campañas) mediante un motor estadístico local (`server/forecast.js`), sin depender de la IA:
+
+- Ritmo semanal estimado (media móvil con más peso a las semanas recientes, mezclada con una referencia prudente de la red cuando la categoría tiene poca historia), tendencia y variabilidad.
+- Escenario base con rango orientativo (~80 %), probabilidad aproximada de alcanzar la meta, fecha estimada de cumplimiento y ritmo necesario frente al ritmo real.
+- Demanda pendiente (solicitudes aprobadas y en revisión), existencias libres, productos bajo mínimo y cobertura de la demanda.
+- Estado de las campañas de la categoría (adelantada, en ritmo o atrasada) y proyección al cierre.
+- Panorama por categoría con el faltante proyectado, nivel de confianza de los datos, lecturas automáticas, metodología y descarga en CSV.
+
+Al abrir el panel se calcula de inmediato. La IA es opcional: si está activada la casilla «Redactar la interpretación con IA» y hay `GROQ_API_KEY`, la API envía a Groq únicamente cifras ya calculadas (sin nombres, perfiles ni datos personales) para que redacte la interpretación; si falla o no está configurada, se muestra una interpretación automática y la proyección sigue funcionando. Las empresas ven solo sus propias donaciones y campañas más la demanda agregada, sin inventario. Son escenarios orientativos basados en datos simulados y escasos, no resultados garantizados.
 
 ## Preparar contraseñas para despliegue
 

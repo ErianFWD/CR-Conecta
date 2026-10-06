@@ -1,3 +1,4 @@
+import { ProjectionNotifications } from './components/ProjectionNotifications';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { useDisplayPreferences } from './lib/useDisplayPreferences';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -194,6 +195,7 @@ function Shell() {
       />
 
       <ConfirmationDialog />
+      <ProjectionNotifications key={session?.id || 'guest'} session={session} />
     </>
   );
 }

@@ -5,6 +5,8 @@ import { promisify } from 'node:util';
 import { evaluateRequest, createRequest, nextSectionId, nextUserId, publicRequest, validateNewSection, validateNewUser, ValidationError } from './validation.js';
 import { CATEGORY_LIMITS } from '../src/constants/limits.js';
 import { answerSiteQuestion } from './assistant.js';
+import { publicTrackedProjection } from './projectionTracking.js';
+import { randomUUID as projectionId } from 'node:crypto';
 import { projectCampaign } from './projection.js';
 import { notifyN8n } from './n8n.js';
 import { isValidDonationPhoto } from './donationPhoto.js';
@@ -352,23 +354,71 @@ export function createApiServer({
         return;
       }
 
+      if (path[0] === 'projections') {
+        if (!user || ![ADMIN, 'Empresa donante'].includes(user.role)) {
+          send(response, user ? 403 : 401, { message: 'Iniciá sesión como administrador o empresa para consultar tus proyecciones.' }, corsHeaders);
+          return;
+        }
+        const records = (database.projections || []).filter(row => row.ownerId === user.id);
+        if (request.method === 'GET' && path.length === 1) {
+          send(response, 200, records.map(row => publicTrackedProjection(row, database.donations || [])), corsHeaders);
+          return;
+        }
+        const record = records.find(row => row.id === path[1]);
+        if (request.method === 'POST' && path[2] === 'acknowledge' && record) {
+          const state = publicTrackedProjection(record, database.donations || []);
+          record.acknowledgedStatus = state.status;
+          await persist(database);
+          send(response, 200, { ...state, acknowledgedStatus: state.status }, corsHeaders);
+          return;
+        }
+        send(response, 404, { message: 'Proyección no encontrada.' }, corsHeaders);
+        return;
+      }
+
       if (path[0] === 'assistant' && path[1] === 'campaign-projection' && request.method === 'POST') {
         if (!user || ![ADMIN, 'Empresa donante'].includes(user.role)) {
           send(response, user ? 403 : 401, { message: 'Solo administración y empresas donantes pueden generar proyecciones.' }, corsHeaders);
           return;
         }
+        const input = await readBody(request);
+        // Solo las consultas que invocan a la IA consumen el límite temporal; el cálculo estadístico es local.
+        const usesAI = input?.useAI !== false;
         const now = Date.now();
         const attempts = (projectionAttempts.get(user.id) || []).filter(time => time > now - 10 * 60 * 1000);
-        if (attempts.length >= 10) {
-          send(response, 429, { message: 'Llegaste al límite temporal de proyecciones. Intentá en unos minutos.' }, corsHeaders);
+        if (usesAI && attempts.length >= 10) {
+          send(response, 429, { message: 'Llegaste al límite temporal de proyecciones con IA. Intentá en unos minutos o desactivá la interpretación con IA.' }, corsHeaders);
           return;
         }
-        const input = await readBody(request);
-        const ownCampaigns = user.role === ADMIN ? database.campaigns || [] : (database.campaigns || []).filter(item => item.companyId === user.id);
-        const ownDonations = user.role === ADMIN ? database.donations || [] : (database.donations || []).filter(item => item.donorId === user.id);
-        const result = await projectCampaign({ input, campaigns: ownCampaigns, donations: ownDonations,
-          apiKey: assistantApiKey, model: assistantModel, fetchImpl: assistantFetch });
-        projectionAttempts.set(user.id, [...attempts, now]);
+        const isAdmin = user.role === ADMIN;
+        const ownCampaigns = isAdmin ? database.campaigns || [] : (database.campaigns || []).filter(item => item.companyId === user.id);
+        const ownDonations = isAdmin ? database.donations || [] : (database.donations || []).filter(item => item.donorId === user.id);
+        const result = await projectCampaign({
+          input, campaigns: ownCampaigns, donations: ownDonations,
+          requests: database.requests || [],
+          inventory: isAdmin ? database.inventory || [] : [],
+          scope: isAdmin ? 'admin' : 'empresa',
+          apiKey: assistantApiKey, model: assistantModel, fetchImpl: assistantFetch
+        });
+        if (usesAI) projectionAttempts.set(user.id, [...attempts, now]);
+        if (input.track === true) {
+          database.projections ||= [];
+          if (database.projections.filter(row => row.ownerId === user.id).length >= 500) {
+            send(response, 409, { message: 'Ya tenés 500 proyecciones guardadas. Podés calcular sin activar el seguimiento.' }, corsHeaders);
+            return;
+          }
+          const startedAt = new Date().toISOString();
+          const record = {
+            id: projectionId(), ownerId: user.id, scope: result.scope,
+            scenario: result.scenario, startedAt,
+            endsAt: new Date(Date.parse(startedAt) + result.scenario.weeks * 7 * 86400000).toISOString(),
+            baselineDonationIds: (database.donations || []).map(row => row.id),
+            acknowledgedStatus: null, snapshot: result
+          };
+          database.projections.unshift(record);
+          await persist(database);
+          result.trackingId = record.id;
+        }
         send(response, 200, result, corsHeaders);
         return;
       }
@@ -632,6 +682,7 @@ export function createApiServer({
           photo: input.photo,
           quantity,
           date: new Date().toISOString().slice(0, 10),
+          createdAt: new Date().toISOString(),
           destination: requestId ? `Solicitud ${requestId}` : 'Institución',
           status: 'Registrada',
           anonymous: Boolean(input.anonymous),

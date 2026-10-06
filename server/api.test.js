@@ -162,30 +162,45 @@ test('campaign projection is role protected and scopes company data before conta
     { id: 'other', companyId: 'another', category: 'Alimentos sellados', goal: 90, progress: 80 }
   ];
   database.donations = [
-    { id: 'own', donorId: 'company', category: 'Vestimenta', quantity: 4 },
-    { id: 'other', donorId: 'another', category: 'Alimentos sellados', quantity: 40 }
+    { id: 'own', donorId: 'company', category: 'Vestimenta', quantity: 4, date: '2026-09-30' },
+    { id: 'other', donorId: 'another', category: 'Alimentos sellados', quantity: 40, date: '2026-09-30' }
   ];
+  database.inventory = [{ id: 'inv', category: 'Vestimenta', product: 'Ropa privada', available: 99, reserved: 0, minimum: 1 }];
   let providerInput;
+  let providerCalls = 0;
   const server = createApiServer({ database, persist: async () => {}, assistantApiKey: 'server-only-key',
     assistantFetch: async (_url, options) => {
+      providerCalls += 1;
       providerInput = JSON.parse(options.body).messages[1].content;
-      return { ok: true, json: async () => ({ choices: [{ message: { content: '{"summary":"Escenario estimado.","assumptions":["Datos escasos"],"weeklyUnits":[3,4]}' } }] }) };
+      return { ok: true, json: async () => ({ choices: [{ message: { content: '{"summary":"Escenario estimado.","recommendations":["Convocar más aportes"]}' } }] }) };
     }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const url = `http://127.0.0.1:${server.address().port}`;
-  const options = cookie => ({ method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
-    body: JSON.stringify({ category: 'Vestimenta', goal: 20, weeks: 2 }) });
+  const options = (cookie, extra = {}) => ({ method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+    body: JSON.stringify({ category: 'Vestimenta', goal: 20, weeks: 2, ...extra }) });
   assert.equal((await fetch(`${url}/assistant/campaign-projection`, options())).status, 401);
   const beneficiary = await login(url, 'beneficiary');
   assert.equal((await fetch(`${url}/assistant/campaign-projection`, options(beneficiary.cookie))).status, 403);
   const company = await login(url, 'company');
   const response = await fetch(`${url}/assistant/campaign-projection`, options(company.cookie));
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()).weeklyUnits, [3, 4]);
+  const body = await response.json();
+  assert.equal(body.scope, 'empresa');
+  assert.equal(body.stock, null);
+  assert.equal(body.narrative.source, 'ia');
+  assert.equal(body.weeklyUnits.length, 2);
   assert.match(providerInput, /Vestimenta/);
-  assert.doesNotMatch(providerInput, /Alimentos sellados|another/);
+  assert.doesNotMatch(providerInput, /Alimentos sellados|another|Ropa privada/);
+  assert.equal(body.outlook.every(item => item.category === 'Vestimenta'), true);
+
+  // Sin interpretación de IA no se contacta al proveedor.
+  const before = providerCalls;
+  const local = await fetch(`${url}/assistant/campaign-projection`, options(company.cookie, { useAI: false }));
+  assert.equal(local.status, 200);
+  assert.equal((await local.json()).narrative.source, 'automática');
+  assert.equal(providerCalls, before);
 });
 
 test('public and beneficiary request reads do not disclose private records', async t => {

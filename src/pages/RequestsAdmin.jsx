@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CircleCheck, Clock3, FileText, MapPin, Star, Target } from 'lucide-react';
 import { api } from '../lib/api';
+import { DashboardMetric } from '../components/DashboardCharts';
 import { useData } from '../lib/useData';
 import { GoogleIcon } from '../components/GoogleAccessModal';
 import { RequestEvaluationModal } from '../components/RequestEvaluationModal';
@@ -15,18 +16,7 @@ function statusClass(status) {
   return 'revision';
 }
 
-function KpiCard({ icon: Icon, label, value, detail, tone = 'blue' }) {
-  return (
-    <div className="dashboard-metric-card">
-      <span className={`dashboard-metric-icon tone-${tone}`}><Icon size={18} /></span>
-      <div>
-        <strong>{value}</strong>
-        <span>{label}</span>
-        {detail && <small>{detail}</small>}
-      </div>
-    </div>
-  );
-}
+const KpiCard = DashboardMetric;
 
 // Cada rol ve un encabezado distinto: el mismo listado cambia de enfoque.
 const ROLE_VIEW = {

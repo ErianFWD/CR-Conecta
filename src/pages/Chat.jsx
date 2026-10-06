@@ -61,7 +61,7 @@ export function Chat() {
       <div className="page-head">
         <span className="eyebrow">ASISTENTE IA · CR CONECTA</span>
         <h1>Orientación comunitaria</h1>
-        <p>Preguntame lo que necesites. También puedo llevarte a las secciones públicas de CR Conecta, como Donar o Necesidades.</p>
+        <p>Preguntame lo que necesites: puedo ayudarte con temas generales, redacción, ideas, análisis, programación y orientación sobre CR Conecta. También puedo llevarte a sus secciones públicas.</p>
       </div>
 
       <div style={{ background: 'var(--white)', borderRadius: '20px', border: '1px solid var(--line)', maxWidth: '750px', overflow: 'hidden' }}>
@@ -112,7 +112,7 @@ export function Chat() {
             <input
               id="assistant-question"
               value={question}
-              maxLength={1200}
+              maxLength={10000}
               onChange={event => setQuestion(event.target.value)}
               placeholder="Ej. ¿Cómo registro una donación?"
               style={{ flex: 1, minWidth: 0, padding: '11px 14px', borderRadius: '20px', border: '1px solid var(--line)' }}

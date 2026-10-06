@@ -72,7 +72,7 @@ test('assistant rejects missing credentials and overlong questions without calli
     error => error.status === 503
   );
   await assert.rejects(
-    answerSiteQuestion({ question: 'a'.repeat(1201), apiKey: 'test-secret', fetchImpl: async () => { providerCalled = true; } }),
+    answerSiteQuestion({ question: 'a'.repeat(10001), apiKey: 'test-secret', fetchImpl: async () => { providerCalled = true; } }),
     error => error.status === 400
   );
   assert.equal(providerCalled, false);
