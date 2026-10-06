@@ -1,61 +1,49 @@
 import { BarChart3 } from 'lucide-react';
 
-export function DashboardBarChart({ title, subtitle, items, variant = 'bars', emptyLabel = 'Aún no hay datos para mostrar.' }) {
-  const maximum = Math.max(1, ...items.map(item => item.value));
-  const total = items.reduce((sum, item) => sum + item.value, 0);
-  const colors = [
-    'linear-gradient(135deg, #05b8a5, #26d7c4)',
-    'linear-gradient(135deg, #ff7043, #ffad42)',
-    'linear-gradient(135deg, #7256e8, #ad78ff)',
-    'linear-gradient(135deg, #1788e8, #45bdff)',
-    'linear-gradient(135deg, #e84e91, #ff7fb1)',
-    'linear-gradient(135deg, #8bbd22, #c5e94d)'
-  ];
+const chartColors = ['#257a9e', '#5a62bb', '#198c9b', '#4678a8', '#8b5fbd', '#4d879a'];
 
+function safeChartItems(items) {
+  return items.map(item => ({
+    label: String(item.label || 'Sin clasificar'),
+    value: Number.isFinite(Number(item.value)) ? Math.max(0, Number(item.value)) : 0
+  }));
+}
+
+export function DashboardBarChart({ title, subtitle, items, variant = 'bars', emptyLabel = 'Aún no hay datos para mostrar.' }) {
+  const rows = safeChartItems(items);
+  const maximum = Math.max(1, ...rows.map(item => item.value));
+  const total = rows.reduce((sum, item) => sum + item.value, 0);
+  const columns = variant === 'columns';
   return (
-    <section className="dashboard-card dashboard-chart-card">
+    <section className="dashboard-card dashboard-chart-card" aria-label={title}>
       <div className="dashboard-chart-heading">
-        <span className="dashboard-chart-icon"><BarChart3 size={18} /></span>
+        <span className="dashboard-chart-icon" aria-hidden="true"><BarChart3 size={18} /></span>
         <div><h3>{title}</h3><p>{subtitle}</p></div>
-        {items.length > 0 && <span className="dashboard-chart-total"><strong>{total}</strong><small>registros</small></span>}
+        {rows.length > 0 && <span className="dashboard-chart-total"><strong>{total.toLocaleString('es-CR')}</strong><small>registros</small></span>}
       </div>
-      {items.length ? (
-        <div className={`dashboard-bars ${variant === 'columns' ? 'dashboard-bars-columns' : ''}`}>
-          {items.map((item, index) => (
-            <div className="dashboard-bar-row" key={item.label} style={{ '--bar-delay': `${index * 90}ms` }}>
-              {variant === 'columns' ? (
-                <>
-                  <div className="dashboard-column-value">{item.value}</div>
-                  <div className="dashboard-column-track">
-                    <span style={{
-                      '--bar-height': `${Math.max(item.value > 0 ? 10 : 0, (item.value / maximum) * 100)}%`,
-                      '--bar-color': colors[index % colors.length],
-                      '--bar-delay': `${index * 90}ms`
-                    }} />
-                  </div>
-                  <div className="dashboard-column-label">
-                    <strong>{item.label}</strong>
-                    <small>{total ? `${Math.round((item.value / total) * 100)}%` : '0%'}</small>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="dashboard-bar-label">
-                    <span><i style={{ background: colors[index % colors.length] }} />{item.label}</span>
-                    <strong>{item.value}<small>{total ? `${Math.round((item.value / total) * 100)}%` : '0%'}</small></strong>
-                  </div>
-                  <div className="dashboard-bar-track">
-                    <span style={{
-                      '--bar-width': `${Math.max(item.value > 0 ? 7 : 0, (item.value / maximum) * 100)}%`,
-                      '--bar-color': colors[index % colors.length],
-                      '--bar-delay': `${index * 90}ms`
-                    }} />
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
+      {rows.length > 0 ? (
+        <>
+          <div className={`dashboard-bars ${columns ? 'dashboard-bars-columns' : ''}`} role="list" aria-label={`Distribución de ${title.toLowerCase()}`}>
+            {rows.map((item, index) => {
+              const percentage = total ? Math.round(item.value / total * 100) : 0;
+              const color = chartColors[index % chartColors.length];
+              return <div className="dashboard-bar-row" key={`${item.label}-${index}`} role="listitem"
+                aria-label={`${item.label}: ${item.value} registros, ${percentage} por ciento`} style={{ '--bar-color': color }}>
+                {columns ? <>
+                  <strong className="dashboard-column-value">{item.value.toLocaleString('es-CR')}</strong>
+                  <div className="dashboard-column-track" aria-hidden="true"><span style={{ height: `${item.value ? Math.max(5, item.value / maximum * 100) : 0}%` }} /></div>
+                  <div className="dashboard-column-label"><strong title={item.label}>{item.label}</strong><small>{percentage} % del total</small></div>
+                </> : <>
+                  <div className="dashboard-bar-label"><span><i aria-hidden="true" />{item.label}</span><strong>{item.value.toLocaleString('es-CR')} <small>{percentage} %</small></strong></div>
+                  <div className="dashboard-bar-track" aria-hidden="true"><span style={{ width: `${item.value ? Math.max(3, item.value / maximum * 100) : 0}%` }} /></div>
+                </>}
+              </div>;
+            })}
+          </div>
+          {columns
+            ? <p className="dashboard-chart-footnote">Escala máxima: {maximum.toLocaleString('es-CR')} registros</p>
+            : <div className="dashboard-chart-axis" aria-hidden="true"><span>0</span><span>{Math.round(maximum / 2).toLocaleString('es-CR')}</span><span>{maximum.toLocaleString('es-CR')}</span></div>}
+        </>
       ) : <p className="dashboard-empty-note">{emptyLabel}</p>}
     </section>
   );
@@ -64,10 +52,12 @@ export function DashboardBarChart({ title, subtitle, items, variant = 'bars', em
 export function DashboardMetric({ icon: Icon, label, value, detail, tone = 'blue' }) {
   return (
     <div className={`dashboard-metric-card tone-${tone}`}>
-      <span className="dashboard-metric-icon"><Icon size={19} /></span>
-      <span className="dashboard-metric-label">{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
+      <span className="dashboard-metric-icon" aria-hidden="true"><Icon size={19} /></span>
+      <div className="dashboard-metric-content">
+        <span className="dashboard-metric-label">{label}</span>
+        <strong>{value}</strong>
+        {detail && <small>{detail}</small>}
+      </div>
     </div>
   );
 }
